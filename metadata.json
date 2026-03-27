@@ -1,0 +1,5 @@
+{
+  "name": "HK Name Predictor 香港粤语",
+  "description": "Predict Traditional Chinese names from Hong Kong Cantonese Pinyin and gender.",
+  "requestFramePermissions": []
+}
