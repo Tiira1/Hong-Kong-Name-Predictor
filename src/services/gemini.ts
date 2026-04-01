@@ -20,7 +20,7 @@ export async function predictHKName(pinyin: string, gender: string): Promise<Nam
     throw new Error("请在 Vercel 环境变量中设置 VITE_DEEPSEEK_API_KEY");
   }
 
-  const response = await fetch("[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)", {
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
