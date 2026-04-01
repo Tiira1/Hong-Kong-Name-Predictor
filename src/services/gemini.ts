@@ -1,7 +1,3 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || "" });
-
 export interface NamePrediction {
   syllables: {
     pinyin: string;
@@ -18,64 +14,38 @@ export interface NamePrediction {
 }
 
 export async function predictHKName(pinyin: string, gender: string): Promise<NamePrediction> {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `Predict Hong Kong Traditional Chinese names for the Cantonese Pinyin: "${pinyin}" with gender: "${gender}".
-    
-    Rules:
-    1. Use Hong Kong naming conventions (Traditional Chinese).
-    2. For each syllable in the Pinyin, provide the most likely characters ranked by probability.
-    3. Suggest 3-5 complete full name combinations.
-    4. For each full name, provide the standard Cantonese Jyutping (with tones).
-    5. Explain why these names are common for the given gender.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          syllables: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                pinyin: { type: Type.STRING },
-                suggestions: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      char: { type: Type.STRING },
-                      meaning: { type: Type.STRING }
-                    },
-                    required: ["char"]
-                  }
-                }
-              },
-              required: ["pinyin", "suggestions"]
-            }
-          },
-          fullNames: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                chinese: { type: Type.STRING },
-                jyutping: { type: Type.STRING },
-                explanation: { type: Type.STRING }
-              },
-              required: ["chinese", "jyutping", "explanation"]
-            }
-          }
+  // 1. 从环境变量里拿钥匙
+  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
+
+  // 2. 向 DeepSeek 发起 HTTP 请求 (像寄快递一样)
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [
+        {
+          role: "system",
+          content: `You are a Hong Kong naming expert. Return ONLY JSON. 
+          Rules:
+          1. Use Hong Kong naming conventions (Traditional Chinese).
+          2. For each syllable in the Pinyin, provide the most likely characters.
+          3. Suggest 3-5 full names with Jyutping and explanations.`
         },
-        required: ["syllables", "fullNames"]
-      }
-    }
+        {
+          role: "user",
+          content: `Predict names for Pinyin: "${pinyin}" and Gender: "${gender}".`
+        }
+      ],
+      // 强制 AI 只吐出 JSON 格式，不废话
+      response_format: { type: 'json_object' }
+    })
   });
 
-  try {
-    return JSON.parse(response.text || "{}");
-  } catch (e) {
-    console.error("Failed to parse Gemini response", e);
-    throw new Error("Invalid response from AI");
-  }
+  const result = await response.json();
+  // 提取 AI 回复的文本内容并转成对象
+  return JSON.parse(result.choices[0].message.content);
 }
