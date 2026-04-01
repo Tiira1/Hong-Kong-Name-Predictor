@@ -44,8 +44,27 @@ export async function predictHKName(pinyin: string, gender: string): Promise<Nam
       response_format: { type: 'json_object' }
     })
   });
-
+// 1. 把 DeepSeek 给回来的原始包裹拆开
   const result = await response.json();
-  // 提取 AI 回复的文本内容并转成对象
-  return JSON.parse(result.choices[0].message.content);
+
+  // 2. 检查 DeepSeek 是不是在骂你（比如 402 没钱了）
+  if (!response.ok) {
+    if (response.status === 402) {
+      throw new Error("DeepSeek 账户余额不足，请去后台充值。");
+    }
+    throw new Error(`API 报错了：${result.error?.message || '未知错误'}`);
+  }
+
+  // 3. 检查包裹里到底有没有我们要的东西（choices 列表）
+  if (!result.choices || result.choices.length === 0) {
+    throw new Error("AI 没给回任何结果，请稍后再试。");
+  }
+
+  // 4. 确认没问题了，再把里面的内容转成网页能读懂的格式
+  try {
+    return JSON.parse(result.choices[0].message.content);
+  } catch (e) {
+    console.error("JSON 解析失败:", result.choices[0].message.content);
+    throw new Error("AI 返回的格式不对，请再试一次。");
+  }
 }
