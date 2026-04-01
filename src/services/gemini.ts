@@ -14,11 +14,13 @@ export interface NamePrediction {
 }
 
 export async function predictHKName(pinyin: string, gender: string): Promise<NamePrediction> {
-  // 1. 从环境变量里拿钥匙
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
 
-  // 2. 向 DeepSeek 发起 HTTP 请求 (像寄快递一样)
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  if (!apiKey) {
+    throw new Error("请在 Vercel 环境变量中设置 VITE_DEEPSEEK_API_KEY");
+  }
+
+  const response = await fetch("[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -29,42 +31,50 @@ export async function predictHKName(pinyin: string, gender: string): Promise<Nam
       messages: [
         {
           role: "system",
-          content: `You are a Hong Kong naming expert. Return ONLY JSON. 
-          Rules:
-          1. Use Hong Kong naming conventions (Traditional Chinese).
-          2. For each syllable in the Pinyin, provide the most likely characters.
-          3. Suggest 3-5 full names with Jyutping and explanations.`
+          content: `You are a professional Hong Kong naming consultant. 
+          Return ONLY a valid JSON object. 
+          REQUIRED STRUCTURE:
+          {
+            "syllables": [{ "pinyin": "string", "suggestions": [{ "char": "string", "meaning": "string" }] }],
+            "fullNames": [{ "chinese": "string", "jyutping": "string", "explanation": "string" }]
+          }`
         },
         {
           role: "user",
-          content: `Predict names for Pinyin: "${pinyin}" and Gender: "${gender}".`
+          content: `Cantonese pinyin: "${pinyin}", Gender: "${gender}". Generate names.`
         }
       ],
-      // 强制 AI 只吐出 JSON 格式，不废话
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      temperature: 0.5
     })
   });
-// 1. 把 DeepSeek 给回来的原始包裹拆开
+
   const result = await response.json();
 
-  // 2. 检查 DeepSeek 是不是在骂你（比如 402 没钱了）
   if (!response.ok) {
     if (response.status === 402) {
-      throw new Error("DeepSeek 账户余额不足，请去后台充值。");
+      throw new Error("DeepSeek 账户余额不足，请充值。");
     }
-    throw new Error(`API 报错了：${result.error?.message || '未知错误'}`);
+    throw new Error(result.error?.message || "API 请求失败");
   }
 
-  // 3. 检查包裹里到底有没有我们要的东西（choices 列表）
-  if (!result.choices || result.choices.length === 0) {
-    throw new Error("AI 没给回任何结果，请稍后再试。");
-  }
-
-  // 4. 确认没问题了，再把里面的内容转成网页能读懂的格式
+  let content = result.choices?.[0]?.message?.content || "";
+  
+  // 更加鲁棒的 JSON 提取逻辑
+  // 1. 尝试直接解析
   try {
-    return JSON.parse(result.choices[0].message.content);
+    return JSON.parse(content) as NamePrediction;
   } catch (e) {
-    console.error("JSON 解析失败:", result.choices[0].message.content);
-    throw new Error("AI 返回的格式不对，请再试一次。");
+    // 2. 如果解析失败，尝试剥离 Markdown 代码块
+    console.warn("直接解析 JSON 失败，尝试清洗数据...");
+    const jsonMatch = content.match(/\{[\s\S]*\}/); // 提取大括号内的所有内容
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]) as NamePrediction;
+      } catch (innerE) {
+        console.error("清洗后解析依然失败:", jsonMatch[0]);
+      }
+    }
+    throw new Error("AI 返回的数据格式无法识别，请重试。");
   }
 }
